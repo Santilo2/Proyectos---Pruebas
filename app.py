@@ -1,10 +1,48 @@
 import streamlit as st
 import pandas as pd
+import sys
+import os # Necesario para la gestión de rutas con PyInstaller
+import locale # Importamos el módulo locale
 
 # --- Configuración Inicial ---
 st.set_page_config(layout="wide")
-NOMBRE_ARCHIVO_DATOS = 'data.xlsx'
-NOMBRE_ARCHIVO_USUARIOS = 'usuarios.csv'
+
+# -----------------------------------------------------------
+# Configuración del LOCALE para que los meses se muestren en español
+# -----------------------------------------------------------
+try:
+    # Intentar con diferentes configuraciones de locale para asegurar la compatibilidad
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES')
+    except locale.Error:
+        try:
+            locale.setlocale(locale.LC_TIME, 'es')
+        except locale.Error:
+            pass # Si falla, continúa con el locale por defecto (probablemente inglés)
+
+# -----------------------------------------------------------
+# Lógica para la ruta de los archivos de datos (PyInstaller Fix)
+# -----------------------------------------------------------
+
+# Detectar si la aplicación se está ejecutando como un ejecutable (congelado por PyInstaller)
+if getattr(sys, 'frozen', False):
+    # Si está congelado, la ruta base es el directorio temporal donde PyInstaller 
+    # desempaqueta los archivos de datos (sys._MEIPASS)
+    base_path = sys._MEIPASS
+else:
+    # Si se ejecuta como script normal, la ruta base es el directorio actual
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+# Construir las rutas completas a los archivos de datos
+NOMBRE_ARCHIVO_DATOS = os.path.join(base_path, 'data.xlsx')
+NOMBRE_ARCHIVO_USUARIOS = os.path.join(base_path, 'usuarios.csv')
+
+# -----------------------------------------------------------
+# Fin de Lógica para la ruta de los archivos
+# -----------------------------------------------------------
+
 
 def limpiar_nombres_columnas(df, case='upper'):
     """
@@ -22,6 +60,7 @@ def limpiar_nombres_columnas(df, case='upper'):
 def cargar_datos_excel():
     """Carga y limpia la base de datos principal desde el Excel."""
     try:
+        # Ahora usa la ruta completa definida por NOMBRE_ARCHIVO_DATOS
         df = pd.read_excel(NOMBRE_ARCHIVO_DATOS)
         # LIMPIEZA CRUCIAL: Estandarizar encabezados a MAYÚSCULAS
         df = limpiar_nombres_columnas(df, case='upper') 
@@ -30,15 +69,15 @@ def cargar_datos_excel():
         df['FECHA_JUICIO_ANTE'] = pd.to_datetime(df['FECHA_JUICIO_ANTE'], errors='coerce')
         df['NRO_CEDULA'] = df['NRO_CEDULA'].astype(str)
         
-        # Aseguramos que todas las columnas relevantes estén en minúsculas para comparaciones de contenido
-        df['NOMBRE_CLIENTE'] = df['NOMBRE_CLIENTE'].astype(str).str.lower()
-        df['ABOGADO'] = df['ABOGADO'].astype(str).str.lower()
-        df['FORMA_PAGO'] = df['FORMA_PAGO'].astype(str).str.lower()
+        # CORRECCIÓN DE ESPACIOS Y MINÚSCULAS PARA FILTRADO
+        df['NOMBRE_CLIENTE'] = df['NOMBRE_CLIENTE'].astype(str).str.strip().str.lower() 
+        df['ABOGADO'] = df['ABOGADO'].astype(str).str.strip().str.lower()             
+        df['FORMA_PAGO'] = df['FORMA_PAGO'].astype(str).str.strip().str.lower()      
         
         df = df.fillna({'NOMBRE_CLIENTE': '', 'ABOGADO': '', 'FORMA_PAGO': ''})
         return df
     except FileNotFoundError:
-        st.error(f"🛑 Error: No se encontró el archivo {NOMBRE_ARCHIVO_DATOS}. Por favor, créalo y asegúrate de que esté en la misma carpeta.")
+        st.error(f"🛑 Error: No se encontró el archivo {NOMBRE_ARCHIVO_DATOS}. Por favor, asegúrate de que esté incluido en el ejecutable o en la misma carpeta.")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"❌ Error al cargar o procesar el Excel. Asegúrate de que las columnas existan: {e}")
@@ -49,16 +88,17 @@ def cargar_datos_excel():
 def cargar_datos_usuarios():
     """Carga la tabla de usuarios para el login."""
     try:
+        # Ahora usa la ruta completa definida por NOMBRE_ARCHIVO_USUARIOS
         df_users = pd.read_csv(NOMBRE_ARCHIVO_USUARIOS)
         # LIMPIEZA CRUCIAL: Estandarizar encabezados a MINÚSCULAS
         df_users = limpiar_nombres_columnas(df_users, case='lower')
         
-        # Aseguramos que los filtros y usuarios estén en minúsculas para coincidir con la base de datos
-        df_users['usuario'] = df_users['usuario'].astype(str).str.lower()
-        df_users['filtro_abogado'] = df_users['filtro_abogado'].astype(str).str.lower()
+        # CORRECCIÓN DE ESPACIOS Y MINÚSCULAS PARA FILTRADO
+        df_users['usuario'] = df_users['usuario'].astype(str).str.strip().str.lower() 
+        df_users['filtro_abogado'] = df_users['filtro_abogado'].astype(str).str.strip().str.lower() 
         return df_users
     except FileNotFoundError:
-        st.error(f"🛑 Error: No se encontró el archivo de usuarios {NOMBRE_ARCHIVO_USUARIOS}. Por favor, créalo y asegúrate de que esté en la misma carpeta.")
+        st.error(f"🛑 Error: No se encontró el archivo de usuarios {NOMBRE_ARCHIVO_USUARIOS}. Por favor, asegúrate de que esté incluido en el ejecutable o en la misma carpeta.")
         return pd.DataFrame()
 
 
@@ -84,14 +124,14 @@ def format_guaranies(value):
 def login_form():
     """Muestra el formulario de login y maneja la autenticación."""
     
-    st.title("Ingresá")
+    st.title("Gestión Juridica")
     st.markdown("Iniciá sesión para continuar")
 
     col1, col2, col3 = st.columns([1, 1, 1])
 
     with col2:
         # Aseguramos que el input de usuario se convierta a minúsculas
-        username_input = st.text_input("USUARIO", label_visibility="visible", placeholder="CORREO ELECTRONICO")
+        username_input = st.text_input("USUARIO", label_visibility="visible", placeholder="Ingresar Usuario")
         username = username_input.strip().lower() 
         password = st.text_input("CONTRASEÑA", type="password", label_visibility="visible")
         
@@ -107,7 +147,7 @@ def login_form():
                 
                 if not user_match.empty:
                     st.session_state['logged_in'] = True
-                    # El filtro ya está en minúsculas
+                    # El filtro ya está en minúsculas y sin espacios
                     st.session_state['filtro_abogado'] = user_match['filtro_abogado'].iloc[0] 
                     st.success("¡Inicio de sesión exitoso!")
                     st.rerun()
@@ -158,6 +198,7 @@ def mostrar_dashboard_resultados(df_resultados):
     # 1. Crear las columnas 'AÑO', 'MES' y 'MES_NUM' dentro del DataFrame
     # MES_NUM es crucial para ordenar los meses cronológicamente.
     df_resultados['AÑO'] = df_resultados['FECHA_PAGO'].dt.year
+    # ESTA LÍNEA AHORA USA EL LOCALE ESPAÑOL ESTABLECIDO AL PRINCIPIO
     df_resultados['MES'] = df_resultados['FECHA_PAGO'].dt.strftime('%B')
     df_resultados['MES_NUM'] = df_resultados['FECHA_PAGO'].dt.month
     
@@ -228,7 +269,7 @@ def mostrar_dashboard_resultados(df_resultados):
             st.markdown(f"**Último cobro**: {ultimo_pago_str}")
 
     # E. Presentación del Detalle de Pagos
-    st.subheader("DETALLE DE PAGOS POR PERÍODO, AÑO, MES Y FORMA (CHEQUE JUDICIAL / EFECTIVO-OTROS)")
+    st.subheader("DETALLE DE PAGOS ")
         
     df_display = df_pivot.copy()
     
@@ -317,10 +358,11 @@ def app_principal():
     
     filtro_abogado = st.session_state.get('filtro_abogado') # Ya está en minúsculas
     
-    st.sidebar.title("Bienvenido al Sistema")
+    st.sidebar.title("Bienvenido al Detalle de Cobros")
     # Capitalizamos la primera letra del nombre del abogado para mostrarlo bonito en el sidebar
     abogado_display = filtro_abogado.title() if filtro_abogado != 'todos' else 'TODOS'
-    st.sidebar.info(f"Filtro de Seguridad Activo: {abogado_display}")
+    # COMENTAMOS la línea para que no muestre el filtro de seguridad activo
+    # st.sidebar.info(f"Filtro de Seguridad Activo: {abogado_display}") 
     
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state['logged_in'] = False
@@ -337,7 +379,7 @@ def app_principal():
     if filtro_abogado == 'todos':
         df_filtrado_abogado = df_base.copy()
     elif filtro_abogado:
-        # El filtro_abogado y la columna 'ABOGADO' ya están en minúsculas
+        # El filtro_abogado y la columna 'ABOGADO' ya están en minúsculas y sin espacios
         df_filtrado_abogado = df_base[df_base['ABOGADO'] == filtro_abogado].copy()
     else:
         st.warning("No se pudo aplicar el filtro de seguridad. Vuelva a iniciar sesión.")
